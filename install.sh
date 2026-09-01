@@ -1,15 +1,28 @@
 #!/usr/bin/env bash
 # Swarm installer for Linux.
 #
-#   curl -fsSL https://raw.githubusercontent.com/SwayamDani/swarm-releases/main/install.sh | sh
-#   curl -fsSL .../install.sh | sh -s -- --gui
-#   curl -fsSL .../install.sh | sh -s -- --system
+#   curl -fsSL https://raw.githubusercontent.com/SwayamDani/swarm-releases/main/install.sh | bash
+#   curl -fsSL .../install.sh | bash -s -- --gui
+#   curl -fsSL .../install.sh | bash -s -- --system
 #
 # Default behaviour (no flags) mirrors rustup/Homebrew/Ollama: silent, no
 # prompts, auto-detects the GPU and installs per-user (no root needed).
 # --gui drives the same steps through zenity dialogs instead of plain stdout.
 # --system installs to /opt/swarm + /usr/share/applications (needs a
 # permission prompt: sudo normally, pkexec under --gui).
+#
+# This script uses bash-only syntax ([[, arrays). Piping into `sh` instead
+# of `bash` runs it under dash on Debian/Ubuntu, which silently treats every
+# `[[ ]]` as a failed command (exit 127) rather than erroring — so every
+# conditional branch resolves to false and the installer corrupts silently
+# (e.g. picks the single-file download path for the GPU build, which only
+# ships as split parts, and 404s). This guard fails loudly instead.
+if [ -z "${BASH_VERSION:-}" ]; then
+    echo "ERROR: this installer requires bash, not sh. Re-run with:" >&2
+    echo "  curl -fsSL https://raw.githubusercontent.com/SwayamDani/swarm-releases/main/install.sh | bash" >&2
+    exit 1
+fi
+
 set -euo pipefail
 
 APP_VERSION="0.1.0-beta.1"
