@@ -268,17 +268,24 @@ install_files() {
     "${maybe_sudo[@]}" cp "${TMP_DIR}/${APP_ASSET}" "${app_dir}/Swarm.AppImage"
     "${maybe_sudo[@]}" chmod +x "${app_dir}/Swarm.AppImage"
 
-    # Launch wrapper, not a direct Exec= to the AppImage: webkit2gtk's
-    # DMA-BUF renderer has a known input/render desync bug (clicks land on
-    # the window underneath) specifically on Wayland with the NVIDIA
-    # proprietary driver — Mesa (AMD/Intel) and X11 sessions aren't affected.
-    # Detecting this at launch time, rather than baking a fix into every
-    # install regardless of GPU, keeps hardware acceleration intact for
-    # everyone the bug doesn't apply to.
+    # Launch wrapper, not a direct Exec= to the AppImage: native-Wayland GTK
+    # clients on the NVIDIA proprietary driver have long-documented
+    # input/focus/stacking bugs (webkit2gtk's DMA-BUF content renderer
+    # desyncs input from the visible surface; separately, Mutter's window
+    # stacking can misbehave for undecorated GTK windows on the same
+    # driver, dropping focus back to the previous window on click).
+    # Mesa (AMD/Intel) and X11 sessions aren't affected by either. Detecting
+    # this narrow combination at launch time — rather than changing behavior
+    # for every install regardless of GPU — keeps native Wayland and
+    # hardware acceleration intact for everyone the bugs don't apply to.
     cat > "${TMP_DIR}/swarm-launch.sh" <<'LAUNCHEOF'
 #!/usr/bin/env bash
 if [ "${XDG_SESSION_TYPE:-}" = "wayland" ] && command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then
     export WEBKIT_DISABLE_DMABUF_RENDERER=1
+    # Route the whole app through XWayland instead of native Wayland: GTK's
+    # native-Wayland focus/stacking handling under the NVIDIA driver is
+    # markedly less reliable than XWayland's, which is compositor-managed.
+    export GDK_BACKEND=x11
 fi
 exec "$(dirname "$(readlink -f "$0")")/Swarm.AppImage" "$@"
 LAUNCHEOF
