@@ -268,11 +268,14 @@ install_files() {
     "${maybe_sudo[@]}" cp "${TMP_DIR}/${APP_ASSET}" "${app_dir}/Swarm.AppImage"
     "${maybe_sudo[@]}" chmod +x "${app_dir}/Swarm.AppImage"
 
+    # WEBKIT_DISABLE_DMABUF_RENDERER works around a webkit2gtk/NVIDIA/Wayland
+    # bug where the rendered window and its input hit-region desync, so
+    # clicks land on whatever window is underneath instead of the app.
     cat > "${TMP_DIR}/swarm.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=Swarm
-Exec=${app_dir}/Swarm.AppImage
+Exec=env WEBKIT_DISABLE_DMABUF_RENDERER=1 ${app_dir}/Swarm.AppImage
 Terminal=false
 Categories=Utility;
 EOF
@@ -292,8 +295,8 @@ log "You can now delete this installer — the app and aligner are installed sep
 
 if [[ "$GUI" -eq 1 ]]; then
     if zenity --question --title "Swarm Installer" --text "Installation complete. Launch Swarm now?" 2>/dev/null; then
-        nohup "$APP_PATH" >/dev/null 2>&1 &
+        WEBKIT_DISABLE_DMABUF_RENDERER=1 nohup "$APP_PATH" >/dev/null 2>&1 &
     fi
 else
-    log "Run: $APP_PATH"
+    log "Run: WEBKIT_DISABLE_DMABUF_RENDERER=1 $APP_PATH"
 fi
