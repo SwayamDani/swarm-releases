@@ -268,14 +268,28 @@ install_files() {
     "${maybe_sudo[@]}" cp "${TMP_DIR}/${APP_ASSET}" "${app_dir}/Swarm.AppImage"
     "${maybe_sudo[@]}" chmod +x "${app_dir}/Swarm.AppImage"
 
-    # WEBKIT_DISABLE_DMABUF_RENDERER works around a webkit2gtk/NVIDIA/Wayland
-    # bug where the rendered window and its input hit-region desync, so
-    # clicks land on whatever window is underneath instead of the app.
+    # Launch wrapper, not a direct Exec= to the AppImage: webkit2gtk's
+    # DMA-BUF renderer has a known input/render desync bug (clicks land on
+    # the window underneath) specifically on Wayland with the NVIDIA
+    # proprietary driver — Mesa (AMD/Intel) and X11 sessions aren't affected.
+    # Detecting this at launch time, rather than baking a fix into every
+    # install regardless of GPU, keeps hardware acceleration intact for
+    # everyone the bug doesn't apply to.
+    cat > "${TMP_DIR}/swarm-launch.sh" <<'LAUNCHEOF'
+#!/usr/bin/env bash
+if [ "${XDG_SESSION_TYPE:-}" = "wayland" ] && command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then
+    export WEBKIT_DISABLE_DMABUF_RENDERER=1
+fi
+exec "$(dirname "$(readlink -f "$0")")/Swarm.AppImage" "$@"
+LAUNCHEOF
+    "${maybe_sudo[@]}" cp "${TMP_DIR}/swarm-launch.sh" "${app_dir}/swarm-launch.sh"
+    "${maybe_sudo[@]}" chmod +x "${app_dir}/swarm-launch.sh"
+
     cat > "${TMP_DIR}/swarm.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=Swarm
-Exec=env WEBKIT_DISABLE_DMABUF_RENDERER=1 ${app_dir}/Swarm.AppImage
+Exec=${app_dir}/swarm-launch.sh
 Terminal=false
 Categories=Utility;
 EOF
@@ -284,10 +298,10 @@ EOF
 
 if [[ "$SCOPE" == "system" ]]; then
     install_files "/opt/swarm/bin" "/opt/swarm" "/usr/share/applications" 1
-    APP_PATH="/opt/swarm/Swarm.AppImage"
+    APP_PATH="/opt/swarm/swarm-launch.sh"
 else
     install_files "${HOME}/.swarm/bin" "${HOME}/.local/share/swarm" "${HOME}/.local/share/applications" 0
-    APP_PATH="${HOME}/.local/share/swarm/Swarm.AppImage"
+    APP_PATH="${HOME}/.local/share/swarm/swarm-launch.sh"
 fi
 
 log "Installed. Aligner (${VARIANT}) and Swarm app are ready."
@@ -295,8 +309,8 @@ log "You can now delete this installer — the app and aligner are installed sep
 
 if [[ "$GUI" -eq 1 ]]; then
     if zenity --question --title "Swarm Installer" --text "Installation complete. Launch Swarm now?" 2>/dev/null; then
-        WEBKIT_DISABLE_DMABUF_RENDERER=1 nohup "$APP_PATH" >/dev/null 2>&1 &
+        nohup "$APP_PATH" >/dev/null 2>&1 &
     fi
 else
-    log "Run: WEBKIT_DISABLE_DMABUF_RENDERER=1 $APP_PATH"
+    log "Run: $APP_PATH"
 fi
