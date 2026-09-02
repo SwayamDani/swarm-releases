@@ -243,6 +243,17 @@ download "${RELEASE_URL}/${APP_ASSET}.sha256" "${TMP_DIR}/${APP_ASSET}.sha256" "
 download "${RELEASE_URL}/${APP_ASSET}" "${TMP_DIR}/${APP_ASSET}" "Swarm app"
 verify_sha256 "${TMP_DIR}/${APP_ASSET}" "${TMP_DIR}/${APP_ASSET}.sha256"
 
+# Pre-exported embedding model (ONNX), shared by both cpu and gpu builds —
+# the exported graph itself doesn't depend on the execution provider, only
+# which provider loads it at runtime. Without this, the aligner's first-ever
+# startup pays a one-time ~30-60s PyTorch→ONNX export before it can serve a
+# single query. Fetching it here means that cost lands during `install.sh`
+# instead of during the user's first launch of the app.
+EMBED_CACHE_ASSET="embedding-cache-onnx.tar.gz"
+download "${RELEASE_URL}/${EMBED_CACHE_ASSET}.sha256" "${TMP_DIR}/${EMBED_CACHE_ASSET}.sha256" "embedding cache checksum"
+download "${RELEASE_URL}/${EMBED_CACHE_ASSET}" "${TMP_DIR}/${EMBED_CACHE_ASSET}" "embedding model cache"
+verify_sha256 "${TMP_DIR}/${EMBED_CACHE_ASSET}" "${TMP_DIR}/${EMBED_CACHE_ASSET}.sha256"
+
 # ---------------------------------------------------------------------------
 # Install
 # ---------------------------------------------------------------------------
@@ -310,6 +321,14 @@ else
     install_files "${HOME}/.swarm/bin" "${HOME}/.local/share/swarm" "${HOME}/.local/share/applications" 0
     APP_PATH="${HOME}/.local/share/swarm/swarm-launch.sh"
 fi
+
+# The aligner always reads/writes its data under the invoking user's own
+# HOME (see aligner's config.py `_swarm()` helper) regardless of --system
+# vs --user scope — it's never run as root even when the binaries are
+# installed to /opt. So the embedding cache always lands here too.
+EMBED_CACHE_DIR="${HOME}/.swarm/aligner/.models/onnx-export"
+mkdir -p "$EMBED_CACHE_DIR"
+tar -xzf "${TMP_DIR}/${EMBED_CACHE_ASSET}" -C "$EMBED_CACHE_DIR"
 
 log "Installed. Aligner (${VARIANT}) and Swarm app are ready."
 log "You can now delete this installer — the app and aligner are installed separately."
