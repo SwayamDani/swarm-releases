@@ -25,7 +25,7 @@ fi
 
 set -euo pipefail
 
-APP_VERSION="0.1.0-beta.1"
+APP_VERSION="0.1.1-beta.1"
 RELEASES_REPO="SwayamDani/swarm-releases"
 RELEASE_TAG="app-v${APP_VERSION}"
 RELEASE_URL="https://github.com/${RELEASES_REPO}/releases/download/${RELEASE_TAG}"
